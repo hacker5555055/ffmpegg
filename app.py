@@ -15,14 +15,12 @@ def run_ffmpeg():
     data = request.get_json()
     video_url = data.get('video_url')
     audio_url = data.get('audio_url')
-    subtitle_url = data.get('subtitle_url')
     output_name = data.get('output_name', 'output.mp4')
 
-    # Download the video, audio, and subtitle files
+    # Download the video and audio files
     try:
         video_path = '/tmp/video.mp4'
         audio_path = '/tmp/audio.mp3'
-        subtitle_path = '/tmp/subtitle.srt'
         
         # Download video
         with open(video_path, 'wb') as f:
@@ -32,16 +30,14 @@ def run_ffmpeg():
         with open(audio_path, 'wb') as f:
             f.write(requests.get(audio_url).content)
         
-        # Download subtitle
-        with open(subtitle_path, 'wb') as f:
-            f.write(requests.get(subtitle_url).content)
-        
-        # Run FFmpeg command to combine them
+        # Set output path
         output_path = f'/tmp/{output_name}'
+        
+        # FFmpeg command to resize video to 1080x1920 and add audio
         ffmpeg_command = [
             'ffmpeg', '-i', video_path, '-i', audio_path,
-            '-vf', f"subtitles={subtitle_path}",
-            '-c:v', 'libx264', '-c:a', 'aac', output_path
+            '-vf', 'scale=1080:1920',  # Set video resolution to 1080x1920 for reels/shorts
+            '-c:v', 'libx264', '-c:a', 'aac', '-b:a', '192k', '-shortest', output_path
         ]
         
         subprocess.run(ffmpeg_command, check=True)
