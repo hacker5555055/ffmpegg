@@ -16,34 +16,37 @@ def run_ffmpeg():
     audio_url = data.get('audio_url')
     output_name = data.get('output_name', 'output.mp4')
 
-    # Paths for temporary storage
     video_path = '/tmp/video.mp4'
     audio_path = '/tmp/audio.mp3'
     output_path = f'/tmp/{output_name}'
 
     try:
-        # Function to download file
         def download_file(url, path):
-            headers = {}
-            # Check if URL is from Google Drive and set a header if needed
-            if "drive.google.com" in url:
-                headers["User-Agent"] = "Mozilla/5.0"
-            response = requests.get(url, headers=headers)
-            response.raise_for_status()  # Raises HTTPError for bad responses
+            headers = {"User-Agent": "Mozilla/5.0"} if "drive.google.com" in url else {}
+            response = requests.get(url, headers=headers, stream=True)
+            response.raise_for_status()  # Raise an error if download fails
+
+            # Write content in chunks to avoid memory overload
             with open(path, 'wb') as f:
-                f.write(response.content)
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
 
         # Download video and audio files
         download_file(video_url, video_path)
         download_file(audio_url, audio_path)
-        
+
+        # Check if files were downloaded correctly by verifying their size
+        if os.path.getsize(video_path) == 0 or os.path.getsize(audio_path) == 0:
+            raise ValueError("Downloaded video or audio file is empty.")
+
         # FFmpeg command to combine video and audio, resizing video to 1080x1920
         ffmpeg_command = [
             'ffmpeg', '-i', video_path, '-i', audio_path,
-            '-vf', 'scale=1080:1920',  # Set video resolution to 1080x1920
+            '-vf', 'scale=1080:1920',  # Rescale for reels/shorts
             '-c:v', 'libx264', '-c:a', 'aac', '-b:a', '192k', '-shortest', output_path
         ]
-        
+
         subprocess.run(ffmpeg_command, check=True)
 
         # Return the path to the output video
