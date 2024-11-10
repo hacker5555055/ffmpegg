@@ -53,7 +53,7 @@ def run_ffmpeg():
         ffmpeg_command = [
             'ffmpeg', '-y',  # -y flag forces overwriting output file without asking
             '-i', video_path, '-i', audio_path,
-            '-vf', 'scale=1080:1920',  # Set for 1080x1920 resolution
+            '-vf', 'scale=780:1620',  # Set for 1080x1920 resolution
             '-c:v', 'libx264', '-c:a', 'aac', '-b:a', '192k', '-shortest', output_path
         ]
 
