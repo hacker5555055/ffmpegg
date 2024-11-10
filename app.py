@@ -3,8 +3,12 @@ import subprocess
 import os
 import requests
 import mimetypes
+import logging
 
 app = Flask(__name__)
+
+# Configure logging to output to console
+logging.basicConfig(level=logging.INFO)
 
 @app.route('/')
 def home():
@@ -22,38 +26,50 @@ def run_ffmpeg():
     output_path = f'/tmp/{output_name}'
 
     try:
-        # Download file function
-        def download_file(url, path):
+        # Download file function with improved error handling
+        def download_file(url, path, file_type):
             headers = {"User-Agent": "Mozilla/5.0"} if "drive.google.com" in url else {}
             response = requests.get(url, headers=headers, stream=True)
             response.raise_for_status()
-            
+
             with open(path, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
                         f.write(chunk)
 
-        # Download video and audio files
-        download_file(video_url, video_path)
-        download_file(audio_url, audio_path)
+            mime_type, _ = mimetypes.guess_type(path)
+            if not mime_type or not mime_type.startswith(file_type):
+                raise ValueError(f"Downloaded file is not a valid {file_type} format.")
+        
+        # Download video and audio files with type checking
+        download_file(video_url, video_path, 'video')
+        download_file(audio_url, audio_path, 'audio')
 
-        # FFmpeg command to combine video and audio, resizing for 1080x1920 resolution
+        # Verify files are not empty
+        if os.path.getsize(video_path) == 0 or os.path.getsize(audio_path) == 0:
+            raise ValueError("Downloaded video or audio file is empty.")
+
+        # FFmpeg command to combine video and audio, set resolution for reels
         ffmpeg_command = [
             'ffmpeg', '-i', video_path, '-i', audio_path,
-            '-vf', 'scale=1080:1920',  # Set for 1080x1920 resolution (vertical format)
+            '-vf', 'scale=1080:1920',  # Set for 1080x1920 resolution
             '-c:v', 'libx264', '-c:a', 'aac', '-b:a', '192k', '-shortest', output_path
         ]
 
+        logging.info(f"Running FFmpeg command: {' '.join(ffmpeg_command)}")
         subprocess.run(ffmpeg_command, check=True)
 
         # Return the output video link
         return jsonify({"output_url": f"https://ffmpegg.onrender.com/{output_name}"})
 
     except requests.exceptions.RequestException as e:
+        logging.error(f"File download failed: {str(e)}")
         return jsonify({"error": f"File download failed: {str(e)}"}), 500
     except subprocess.CalledProcessError as e:
+        logging.error(f"FFmpeg processing failed: {str(e)}")
         return jsonify({"error": f"FFmpeg processing failed: {str(e)}"}), 500
     except Exception as e:
+        logging.error(f"Error: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
