@@ -1,23 +1,14 @@
-# Use an official Python runtime as a parent image
-FROM python:3.9-slim
+# Start with a base image that has FFmpeg installed
+FROM jrottenberg/ffmpeg:latest
 
-# Install ffmpeg
-RUN apt-get update && apt-get install -y ffmpeg
+# Set the working directory
+WORKDIR /usr/src/app
 
-# Set the working directory in the container
-WORKDIR /app
+# Install curl or wget to download files
+RUN apt-get update && apt-get install -y curl
 
-# Copy the current directory contents into the container at /app
-COPY . /app
+# Copy the script into the container
+COPY merge_video_audio_subtitles.sh .
 
-# Install any needed packages specified in requirements.txt
-RUN pip install -r requirements.txt
-
-# Make port 8000 available to the world outside this container
-EXPOSE 8000
-
-# Define environment variable
-ENV PORT 8000
-
-# Run app.py when the container launches
-CMD ["python", "app.py"]
+# Command to run when the container starts
+CMD ["bash", "merge_video_audio_subtitles.sh"]
