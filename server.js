@@ -15,8 +15,10 @@ app.post('/merge', (req, res) => {
 
   const outputFile = `output-${Date.now()}.mp4`;
 
+  // Define the script path
   const scriptPath = path.join(__dirname, 'merge_video_audio_subtitles.sh');
 
+  // Build the command to execute the script
   const command = `bash ${scriptPath} "${videoUrl}" "${audioUrl}" "${subtitleUrl}" "${outputFile}"`;
 
   exec(command, (err, stdout, stderr) => {
@@ -24,7 +26,7 @@ app.post('/merge', (req, res) => {
       return res.status(500).send(`Error: ${stderr}`);
     }
 
-    // Return the merged video file
+    // Return the merged file as a download
     res.download(outputFile, (err) => {
       if (err) {
         return res.status(500).send('Error downloading file');
