@@ -1,72 +1,40 @@
 import os
-import requests
-from flask import Flask, request, jsonify, send_file
-import ffmpeg
+import subprocess
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# Set the upload directory
-UPLOAD_FOLDER = "uploads"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-def download_file(url, filename):
-    """Download file from a URL to a specified location."""
-    response = requests.get(url, stream=True)
-    if response.status_code == 200:
-        with open(filename, 'wb') as f:
-            for chunk in response.iter_content(1024):
-                f.write(chunk)
-    else:
-        raise Exception(f"Failed to download file from {url}")
-
-def merge_audio_video_with_subtitles(video_path, audio_path, subtitle_path, output_path):
-    """Merge audio and video files with subtitles."""
-    input_video = ffmpeg.input(video_path)
-    input_audio = ffmpeg.input(audio_path)
-    input_subtitle = ffmpeg.input(subtitle_path)
-
-    # Merge video and audio, then add subtitles
-    (
-        ffmpeg
-        .concat(input_video, input_audio, v=1, a=1)
-        .output(output_path, vf=f"subtitles={subtitle_path}")
-        .run()
-    )
-
 @app.route('/merge', methods=['POST'])
-def merge():
-    video_url = request.json.get('video_url')
-    audio_url = request.json.get('audio_url')
-    subtitle_url = request.json.get('subtitle_url')
+def merge_media():
+    data = request.get_json()
+    video_url = data.get("video_url")
+    audio_url = data.get("audio_url")
+    subtitle_url = data.get("subtitle_url")
 
-    if not video_url or not audio_url or not subtitle_url:
-        return jsonify({"error": "video_url, audio_url, and subtitle_url are required"}), 400
+    # Download files from URLs
+    video_file = 'video.mp4'
+    audio_file = 'audio.mp3'
+    subtitle_file = 'subtitles.srt'
+    output_file = 'merged_output.mp4'
 
-    # Set file paths
-    video_path = os.path.join(UPLOAD_FOLDER, "video.mp4")
-    audio_path = os.path.join(UPLOAD_FOLDER, "audio.mp3")
-    subtitle_path = os.path.join(UPLOAD_FOLDER, "subtitles.srt")
-    output_path = os.path.join(UPLOAD_FOLDER, "merged_output_with_subtitles.mp4")
+    # Using wget to download the files
+    subprocess.run(["wget", "-O", video_file, video_url])
+    subprocess.run(["wget", "-O", audio_file, audio_url])
+    subprocess.run(["wget", "-O", subtitle_file, subtitle_url])
 
-    try:
-        # Download the video, audio, and subtitle files
-        download_file(video_url, video_path)
-        download_file(audio_url, audio_path)
-        download_file(subtitle_url, subtitle_path)
+    # Merge video, audio, and subtitles using FFmpeg
+    ffmpeg_cmd = [
+        'ffmpeg',
+        '-i', video_file,
+        '-i', audio_file,
+        '-vf', f"subtitles={subtitle_file}",
+        '-c:v', 'libx264', '-c:a', 'aac',
+        '-strict', 'experimental', '-y', output_file
+    ]
+    subprocess.run(ffmpeg_cmd)
 
-        # Merge the video, audio, and subtitles
-        merge_audio_video_with_subtitles(video_path, audio_path, subtitle_path, output_path)
-
-        return send_file(output_path, as_attachment=True)
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-    finally:
-        # Clean up the downloaded files
-        for file_path in [video_path, audio_path, subtitle_path, output_path]:
-            if os.path.exists(file_path):
-                os.remove(file_path)
+    # Return the output file URL (assuming you'll host it or store it somewhere accessible)
+    return jsonify({"message": "Video merged successfully", "output_file": output_file})
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
