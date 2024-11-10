@@ -1,14 +1,18 @@
-# Start with a base image that has FFmpeg installed
 FROM jrottenberg/ffmpeg:latest
 
-# Set the working directory
-WORKDIR /usr/src/app
+WORKDIR /app
 
-# Install curl or wget to download files
+# Install curl for fetching the files
 RUN apt-get update && apt-get install -y curl
 
-# Copy the script into the container
+# Copy the script to the container
 COPY merge_video_audio_subtitles.sh .
 
-# Command to run when the container starts
-CMD ["bash", "merge_video_audio_subtitles.sh"]
+# Make the script executable
+RUN chmod +x merge_video_audio_subtitles.sh
+
+# Expose the port the app will run on
+EXPOSE 3000
+
+# Command to run the application
+CMD ["node", "server.js"]
