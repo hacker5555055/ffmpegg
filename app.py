@@ -1,70 +1,73 @@
-from flask import Flask, jsonify, request
-import subprocess
 import os
 import requests
-import mimetypes
+from flask import Flask, request, jsonify, send_file
+import ffmpeg
 
 app = Flask(__name__)
 
-@app.route('/')
-def home():
-    return "FFmpeg is running on Render.com!"
+# Set the upload directory
+UPLOAD_FOLDER = "uploads"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-@app.route('/ffmpeg', methods=['POST'])
-def run_ffmpeg():
-    data = request.get_json()
-    video_url = data.get('video_url')
-    audio_url = data.get('audio_url')
-    output_name = data.get('output_name', 'output.mp4')
+def download_file(url, filename):
+    """Download file from a URL to a specified location."""
+    response = requests.get(url, stream=True)
+    if response.status_code == 200:
+        with open(filename, 'wb') as f:
+            for chunk in response.iter_content(1024):
+                f.write(chunk)
+    else:
+        raise Exception(f"Failed to download file from {url}")
 
-    video_path = '/tmp/video.mp4'
-    audio_path = '/tmp/audio.mp3'
-    output_path = f'/tmp/{output_name}'
+def merge_audio_video_with_subtitles(video_path, audio_path, subtitle_path, output_path):
+    """Merge audio and video files with subtitles."""
+    input_video = ffmpeg.input(video_path)
+    input_audio = ffmpeg.input(audio_path)
+    input_subtitle = ffmpeg.input(subtitle_path)
+
+    # Merge video and audio, then add subtitles
+    (
+        ffmpeg
+        .concat(input_video, input_audio, v=1, a=1)
+        .output(output_path, vf=f"subtitles={subtitle_path}")
+        .run()
+    )
+
+@app.route('/merge', methods=['POST'])
+def merge():
+    video_url = request.json.get('video_url')
+    audio_url = request.json.get('audio_url')
+    subtitle_url = request.json.get('subtitle_url')
+
+    if not video_url or not audio_url or not subtitle_url:
+        return jsonify({"error": "video_url, audio_url, and subtitle_url are required"}), 400
+
+    # Set file paths
+    video_path = os.path.join(UPLOAD_FOLDER, "video.mp4")
+    audio_path = os.path.join(UPLOAD_FOLDER, "audio.mp3")
+    subtitle_path = os.path.join(UPLOAD_FOLDER, "subtitles.srt")
+    output_path = os.path.join(UPLOAD_FOLDER, "merged_output_with_subtitles.mp4")
 
     try:
-        # Download file function with improved error handling
-        def download_file(url, path):
-            headers = {"User-Agent": "Mozilla/5.0"} if "drive.google.com" in url else {}
-            response = requests.get(url, headers=headers, stream=True)
-            response.raise_for_status()
-
-            # Write content in chunks to avoid incomplete downloads
-            with open(path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-
-            # Verify the file type by checking its MIME type
-            mime_type, _ = mimetypes.guess_type(path)
-            if not mime_type or not mime_type.startswith('video'):
-                raise ValueError("Downloaded file is not a valid video format.")
-
-        # Download video and audio files
+        # Download the video, audio, and subtitle files
         download_file(video_url, video_path)
         download_file(audio_url, audio_path)
+        download_file(subtitle_url, subtitle_path)
 
-        # Double-check if files are downloaded and readable
-        if os.path.getsize(video_path) == 0 or os.path.getsize(audio_path) == 0:
-            raise ValueError("Downloaded video or audio file is empty.")
+        # Merge the video, audio, and subtitles
+        merge_audio_video_with_subtitles(video_path, audio_path, subtitle_path, output_path)
 
-        # FFmpeg command to combine video and audio, resizing video for reels
-        ffmpeg_command = [
-            'ffmpeg', '-i', video_path, '-i', audio_path,
-            '-vf', 'scale=1080:1920',  # Set for 1080x1920 resolution
-            '-c:v', 'libx264', '-c:a', 'aac', '-b:a', '192k', '-shortest', output_path
-        ]
+        return send_file(output_path, as_attachment=True)
 
-        subprocess.run(ffmpeg_command, check=True)
-
-        # Return the output video link
-        return jsonify({"output_url": f"https://ffmpegg.onrender.com/{output_name}"})
-
-    except requests.exceptions.RequestException as e:
-        return jsonify({"error": f"File download failed: {str(e)}"}), 500
-    except subprocess.CalledProcessError as e:
-        return jsonify({"error": f"FFmpeg processing failed: {str(e)}"}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+    finally:
+        # Clean up the downloaded files
+        for file_path in [video_path, audio_path, subtitle_path, output_path]:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
