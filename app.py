@@ -1,41 +1,40 @@
 import os
-import subprocess
+import ffmpeg
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-@app.route('/merge', methods=['POST'])
+@app.route('/merge_media', methods=['POST'])
 def merge_media():
+    # Get URLs for video, audio, and subtitles from request JSON body
     data = request.get_json()
-    video_url = data.get("video_url")
-    audio_url = data.get("audio_url")
-    subtitle_url = data.get("subtitle_url")
+    video_url = data.get('video_url')
+    audio_url = data.get('audio_url')
+    subtitle_url = data.get('subtitle_url')
 
-    # Download files from URLs
-    video_file = 'video.mp4'
-    audio_file = 'audio.mp3'
-    subtitle_file = 'subtitles.srt'
-    output_file = 'merged_output.mp4'
+    # Check if URLs are provided
+    if not video_url or not audio_url or not subtitle_url:
+        return jsonify({"error": "Missing video, audio, or subtitle URL"}), 400
 
-    # Using wget to download the files
-    subprocess.run(["wget", "-O", video_file, video_url])
-    subprocess.run(["wget", "-O", audio_file, audio_url])
-    subprocess.run(["wget", "-O", subtitle_file, subtitle_url])
+    # Define output file
+    output_file = "merged_output.mp4"
 
-    # Merge video, audio, and subtitles using FFmpeg
-    ffmpeg_cmd = [
-        'ffmpeg',
-        '-i', video_file,
-        '-i', audio_file,
-        '-vf', f"subtitles={subtitle_file}",
-        '-c:v', 'libx264', '-c:a', 'aac',
-        '-strict', 'experimental', '-y', output_file
-    ]
-    subprocess.run(ffmpeg_cmd)
+    # Download the files from URLs
+    try:
+        # Load video, audio, and subtitles into ffmpeg
+        input_video = ffmpeg.input(video_url)
+        input_audio = ffmpeg.input(audio_url)
+        input_subtitles = ffmpeg.input(subtitle_url)
 
-    # Return the output file URL (assuming you'll host it or store it somewhere accessible)
-    return jsonify({"message": "Video merged successfully", "output_file": output_file})
+        # Merge video, audio, and subtitles
+        ffmpeg.concat(input_video, input_audio, input_subtitles, v=1, a=1).output(output_file).run()
+        
+        # Respond with a success message
+        return jsonify({"message": "Media merged successfully", "output_file": output_file}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
+    # Use the PORT environment variable or default to 8000
+    port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port)
