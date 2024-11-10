@@ -1,23 +1,23 @@
-# Start from the FFmpeg base image
-FROM jrottenberg/ffmpeg:latest
+# Use a lightweight Python image
+FROM python:3.9-slim
+
+# Install FFmpeg and necessary dependencies
+RUN apt-get update && \
+    apt-get install -y ffmpeg && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Set the working directory
 WORKDIR /app
 
-# Install curl to download the video, audio, and subtitle files
-RUN apt-get update && apt-get install -y curl
+# Copy application code into the container
+COPY . .
 
-# Copy your shell script into the container
-COPY merge_video_audio_subtitles.sh .
+# Install Python dependencies
+RUN pip install -r requirements.txt
 
-# Ensure the shell script is executable
-RUN chmod +x merge_video_audio_subtitles.sh
+# Expose port for the Flask app
+EXPOSE 5000
 
-# Copy your Node.js app into the container (if you're using Express)
-COPY server.js .
-
-# Expose the necessary port (3000 is common)
-EXPOSE 3000
-
-# Start the Node.js app (or use a different command based on your setup)
-CMD ["node", "server.js"]
+# Run the application
+CMD ["python", "app.py"]
