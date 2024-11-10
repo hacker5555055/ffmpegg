@@ -16,5 +16,5 @@ VIDEO_FILE=$(basename "$VIDEO_URL")
 AUDIO_FILE=$(basename "$AUDIO_URL")
 SUBTITLE_FILE=$(basename "$SUBTITLE_URL")
 
-# Merge video, audio, and subtitle using FFmpeg
+# Merge the files with FFmpeg
 ffmpeg -i "$VIDEO_FILE" -i "$AUDIO_FILE" -i "$SUBTITLE_FILE" -c:v copy -c:a aac -c:s mov_text "$OUTPUT_FILE"
